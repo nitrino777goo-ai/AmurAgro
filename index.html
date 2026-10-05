@@ -3,29 +3,223 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Мини-приложение</title>
+  <title>AgroEvents</title>
   <script src="https://st.max.ru/js/max-web-app.js"></script>
   <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100%;
-      background: #ffffff;
+      min-height: 100%;
+      background: #f5f6f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+    body {
+      padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+      padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 16px;
+      color: #1a1a1a;
+      text-align: center;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: 500;
+      color: #fff;
+      background: #2b6bf0;
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.1s ease;
+    }
+    button:active { opacity: 0.75; transform: scale(0.98); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.warning { background: #e0433c; }
+    button.success { background: #2fa84f; }
+    button.back {
+      background: transparent;
+      color: #2b6bf0;
+      padding: 10px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    input[type="datetime-local"] {
+      appearance: none;
+      border: 1px solid #d0d3d9;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      background: #fff;
+      color: #1a1a1a;
+      width: 100%;
+    }
+
+    #status {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 14px;
+      color: #666;
+      min-height: 20px;
+    }
+    #status.error { color: #e0433c; }
+    #status.ok { color: #2fa84f; }
   </style>
 </head>
 <body>
-  <!-- Пустое окно. Контент можно добавлять сюда позже. -->
+
+  <!-- Шаг 1: выбор участка -->
+  <div id="screen-uchastok" class="screen active">
+    <h1>Выберите участок</h1>
+    <div class="buttons" id="uchastok-buttons"></div>
+  </div>
+
+  <!-- Шаг 2: выбор типа события -->
+  <div id="screen-event" class="screen">
+    <button class="back" id="back-btn">&larr; Назад к участкам</button>
+    <h1 id="event-title">Событие</h1>
+    <div class="buttons">
+      <button class="success" data-type="Начало уборки">
+        Начало уборки
+      </button>
+      <button class="warning" data-type="Окончание уборки">
+        Окончание уборки
+      </button>
+    </div>
+  </div>
+
+  <!-- Шаг 3: дата/время и отправка -->
+  <div id="screen-datetime" class="screen">
+    <button class="back" id="back-btn-2">&larr; Назад к событию</button>
+    <h1 id="datetime-title">Дата и время</h1>
+    <div class="buttons">
+      <input type="datetime-local" id="datetime-input" step="60">
+      <button class="success" id="submit-btn">Отправить</button>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
   <script>
-    // window.WebApp появляется автоматически после подключения max-web-app.js,
-    // отдельная инициализация не нужна.
-    // Пример проверки, что мини-приложение открыто внутри MAX:
-    if (window.WebApp) {
-      console.log('MAX WebApp запущен, версия:', window.WebApp.version);
-      // Пример чтения параметра запуска (payload из диплинка ?startapp=...):
-      // const startParam = window.WebApp.initDataUnsafe?.start_param;
+    // Замените на адрес вашего сервера с эндпоинтом /api/events
+    const API_URL = 'https://ВАШ-СЕРВЕР.ру/api/events';
+
+    const UCHASTKI = [
+      'Анновский', 'Архаринский', 'Белогорский', 'Бурейский',
+      'Верхнеполтавский', 'Димский', 'Константиновский',
+      'Сергеевский', 'Тамбовский'
+    ];
+
+    const statusEl = document.getElementById('status');
+    const userId = window.WebApp?.initDataUnsafe?.user?.id ?? null;
+    let selectedUchastok = null;
+    let selectedType = null;
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = kind || '';
     }
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      setStatus('', '');
+    }
+
+    // Форматирование текущей даты/времени для input[type=datetime-local]
+    // (локальное время пользователя, без сдвига в UTC)
+    function nowForInput() {
+      const d = new Date();
+      d.setSeconds(0, 0);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    }
+
+    // Отрисовка кнопок участков
+    const uchastokContainer = document.getElementById('uchastok-buttons');
+    UCHASTKI.forEach(name => {
+      const btn = document.createElement('button');
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        selectedUchastok = name;
+        document.getElementById('event-title').textContent = 'Участок: ' + name;
+        showScreen('screen-event');
+      });
+      uchastokContainer.appendChild(btn);
+    });
+
+    document.getElementById('back-btn').addEventListener('click', () => {
+      selectedUchastok = null;
+      showScreen('screen-uchastok');
+    });
+
+    // Шаг 2 → Шаг 3: переход к дате/времени
+    document.querySelectorAll('#screen-event button[data-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedType = btn.dataset.type;
+        document.getElementById('datetime-title').textContent = selectedType;
+        document.getElementById('datetime-input').value = nowForInput();
+        showScreen('screen-datetime');
+      });
+    });
+
+    document.getElementById('back-btn-2').addEventListener('click', () => {
+      selectedType = null;
+      showScreen('screen-event');
+    });
+
+    // Шаг 3: отправка итоговых данных
+    document.getElementById('submit-btn').addEventListener('click', async () => {
+      if (!selectedUchastok || !selectedType) return;
+
+      const dtValue = document.getElementById('datetime-input').value;
+      if (!dtValue) {
+        setStatus('Укажите дату и время', 'error');
+        return;
+      }
+
+      document.getElementById('submit-btn').disabled = true;
+      setStatus('Отправка...', '');
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uchastok: selectedUchastok,
+            typeEv: selectedType,
+            eventDateTime: dtValue, // локальное время в формате YYYY-MM-DDTHH:mm
+            userId: userId
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error('Сервер вернул ошибку ' + res.status);
+        }
+
+        setStatus('Записано ✅', 'ok');
+      } catch (err) {
+        setStatus('Ошибка: ' + err.message, 'error');
+      } finally {
+        document.getElementById('submit-btn').disabled = false;
+      }
+    });
   </script>
 </body>
 </html>
