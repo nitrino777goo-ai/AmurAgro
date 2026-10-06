@@ -98,7 +98,7 @@
       <button class="success" data-type="Начало уборки">
         Начало уборки
       </button>
-      <button class="warning" data-type="Окончание уборки">
+      <button class="warning" data-type="Конец уборки">
         Окончание уборки
       </button>
     </div>
@@ -118,7 +118,7 @@
 
   <script>
     // Замените на адрес вашего сервера с эндпоинтом /api/events
-    const API_URL = 'https://halves-imminent-goldfish.ngrok-free.dev/api/events';
+    const API_URL = 'https://ВАШ-СЕРВЕР.ру/api/events';
 
     const UCHASTKI = [
       'Анновский', 'Архаринский', 'Белогорский', 'Бурейский',
@@ -127,7 +127,12 @@
     ];
 
     const statusEl = document.getElementById('status');
-    const userId = window.WebApp?.initDataUnsafe?.user?.id ?? null;
+    const webAppUser = window.WebApp?.initDataUnsafe?.user ?? null;
+    const userId = webAppUser?.id ?? null;
+    const userName =
+      webAppUser?.name ||
+      [webAppUser?.first_name, webAppUser?.last_name].filter(Boolean).join(' ') ||
+      null;
     let selectedUchastok = null;
     let selectedType = null;
 
@@ -205,7 +210,8 @@
             uchastok: selectedUchastok,
             typeEv: selectedType,
             eventDateTime: dtValue, // локальное время в формате YYYY-MM-DDTHH:mm
-            userId: userId
+            userId: userId,
+            userName: userName
           })
         });
 
