@@ -118,7 +118,7 @@
 
   <script>
     // Замените на адрес вашего сервера с эндпоинтом /api/events
-    const API_URL = 'https://halves-imminent-goldfish.ngrok-free.dev/api/events';
+    const API_URL = 'https://abc123.ngrok-free.app/api/events';
 
     const UCHASTKI = [
       'Анновский', 'Архаринский', 'Белогорский', 'Бурейский',
@@ -205,7 +205,10 @@
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          },
           body: JSON.stringify({
             uchastok: selectedUchastok,
             typeEv: selectedType,
@@ -220,6 +223,12 @@
         }
 
         setStatus('Записано ✅', 'ok');
+
+        // Небольшая пауза, чтобы пользователь успел увидеть галочку,
+        // затем закрываем мини-приложение
+        setTimeout(() => {
+          window.WebApp?.close();
+        }, 2000);
       } catch (err) {
         setStatus('Ошибка: ' + err.message, 'error');
       } finally {
