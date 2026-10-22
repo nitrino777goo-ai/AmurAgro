@@ -71,6 +71,26 @@
       width: 100%;
     }
 
+    textarea#comment-input {
+      appearance: none;
+      border: 1px solid #d0d3d9;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-family: inherit;
+      background: #fff;
+      color: #1a1a1a;
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+    }
+    #comment-counter {
+      text-align: right;
+      font-size: 12px;
+      color: #888;
+      margin-top: -4px;
+    }
+
     #status {
       margin-top: 18px;
       text-align: center;
@@ -114,11 +134,24 @@
     </div>
   </div>
 
+  <!-- Комментарий к завершённому простою (открывается кнопкой в сообщении) -->
+  <div id="screen-comment" class="screen">
+    <h1>Комментарий</h1>
+    <div class="buttons">
+      <textarea id="comment-input" maxlength="1000" placeholder="Введите комментарий"></textarea>
+      <div id="comment-counter">0 / 1000</div>
+      <button class="success" id="comment-submit-btn">Отправить</button>
+    </div>
+  </div>
+
   <div id="status"></div>
 
   <script>
     // Замените на адрес вашего сервера с эндпоинтом /api/events
     const API_URL = 'https://halves-imminent-goldfish.ngrok-free.dev/api/events';
+
+    // Эндпоинт для комментариев (тот же сервер)
+    const COMMENT_API_URL = API_URL.replace('/api/events', '/api/comment');
 
     const UCHASTKI = [
       'Анновский', 'Архаринский', 'Белогорский', 'Бурейский',
@@ -235,6 +268,96 @@
         document.getElementById('submit-btn').disabled = false;
       }
     });
+
+    // ============================================================
+    // РЕЖИМ «КОММЕНТАРИЙ» (запуск кнопкой из сообщения бота)
+    // ============================================================
+
+    // payload кнопки open_app приходит в initData мини-приложения
+    function getStartParam() {
+      const wa = window.WebApp;
+
+      const fromUnsafe = wa?.initDataUnsafe?.start_param;
+      if (fromUnsafe) return String(fromUnsafe);
+
+      try {
+        const raw = wa?.initData;
+        if (raw) {
+          const v = new URLSearchParams(raw).get('start_param');
+          if (v) return v;
+        }
+      } catch (e) {}
+
+      try {
+        const q = new URLSearchParams(window.location.search);
+        const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const v = q.get('WebAppStartParam') || h.get('WebAppStartParam') ||
+                  q.get('start_param') || h.get('start_param');
+        if (v) return v;
+      } catch (e) {}
+
+      return null;
+    }
+
+    const startParam = getStartParam();
+
+    if (startParam && startParam.startsWith('comment_')) {
+      const commentInput = document.getElementById('comment-input');
+      const commentCounter = document.getElementById('comment-counter');
+      const commentBtn = document.getElementById('comment-submit-btn');
+
+      showScreen('screen-comment');
+
+      commentInput.addEventListener('input', () => {
+        commentCounter.textContent = commentInput.value.length + ' / 1000';
+      });
+
+      commentBtn.addEventListener('click', async () => {
+        const text = commentInput.value.trim();
+
+        if (!text) {
+          setStatus('Введите комментарий', 'error');
+          return;
+        }
+
+        commentBtn.disabled = true;
+        setStatus('Отправка...', '');
+
+        try {
+          const res = await fetch(COMMENT_API_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({
+              comment: text,
+              ref: startParam,
+              userId: userId,
+              userName: userName
+            })
+          });
+
+          if (!res.ok) {
+            let msg = 'Сервер вернул ошибку ' + res.status;
+            try {
+              const data = await res.json();
+              if (data?.message) msg = data.message;
+            } catch (e) {}
+            throw new Error(msg);
+          }
+
+          setStatus('Комментарий добавлен ✅', 'ok');
+
+          setTimeout(() => {
+            window.WebApp?.close();
+          }, 2000);
+        } catch (err) {
+          setStatus('Ошибка: ' + err.message, 'error');
+          commentBtn.disabled = false;
+        }
+      });
+    }
   </script>
 </body>
 </html>
